@@ -1,0 +1,33 @@
+{
+  "dependencies": {
+    "@prisma/client": "^6.16.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "morgan": "^1.10.1",
+    "nodemailer": "^7.0.6"
+  },
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "CIHE PRE ENROLLMENT BACKEND",
+  "main": "index.js",
+  "type": "module",
+  "devDependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.16.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Taphu-github/cihebackend.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Taphu-github/cihebackend/issues"
+  },
+  "homepage": "https://github.com/Taphu-github/cihebackend#readme"
+}

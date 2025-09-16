@@ -1,0 +1,234 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+// Core user management
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  studentProfile StudentProfile?
+  enrollmentsApproved Enrollment[] @relation("ApprovedBy")
+  auditLogs AuditLog[]
+  passwordResets PasswordReset[]
+  
+  @@map("users")
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+  TUTOR
+}
+
+// Student information
+model StudentProfile {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique
+  studentId        String   @unique // "2025-00123"
+  firstName        String
+  lastName         String
+  emailAddress     String?  // Optional if different from user email
+  address          String
+  phone            String?
+  program          String
+  yearLevel        Int
+  dateOfBirth      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emergencyContacts EmergencyContact[]
+  enrollments      Enrollment[]
+  
+  @@map("student_profiles")
+}
+
+// Emergency contacts (separate table for multiple contacts)
+model EmergencyContact {
+  id              Int    @id @default(autoincrement())
+  studentProfileId Int
+  name            String
+  relationship    String // "Parent", "Guardian", "Spouse", etc.
+  contactNo       String
+  email           String?
+  isPrimary       Boolean @default(false)
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  
+  @@map("emergency_contacts")
+}
+
+// Time management
+model TimeSlot {
+  id        Int      @id @default(autoincrement())
+  name      String   // "Morning Session", "Afternoon Session"
+  startTime DateTime // Use DateTime for time with proper timezone handling
+  endTime   DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  schedules Schedule[]
+  
+  @@map("time_slots")
+}
+
+model Day {
+  id       Int    @id @default(autoincrement())
+  name     String @unique // "Monday", "Tuesday", etc.
+  shortName String @unique // "Mon", "Tue", etc.
+  dayOrder Int    @unique // 1 for Monday, 2 for Tuesday, etc.
+  
+  schedules Schedule[]
+  
+  @@map("days")
+}
+
+// Academic units/courses
+model Unit {
+  id          Int      @id @default(autoincrement())
+  unitCode    String   @unique // "CS101", "MATH201"
+  title       String
+  description String?
+  credits     Int
+  capacity    Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  schedules   Schedule[]
+  
+  @@map("units")
+}
+
+// Schedule management (replaces SelectedUnit)
+model Schedule {
+  id         Int      @id @default(autoincrement())
+  unitId     Int
+  timeSlotId Int
+  dayId      Int
+  tutorName  String?  // Can be moved to separate Tutor model later
+  location   String?
+  semester   String   // "2025-1", "2025-2"
+  academicYear Int    // 2025
+  maxCapacity Int?    // Override unit capacity if needed
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  
+  unit       Unit     @relation(fields: [unitId], references: [id])
+  timeSlot   TimeSlot @relation(fields: [timeSlotId], references: [id])
+  day        Day      @relation(fields: [dayId], references: [id])
+  enrollments Enrollment[]
+  
+  // Ensure no duplicate schedules
+  @@unique([unitId, timeSlotId, dayId, semester, academicYear])
+  @@map("schedules")
+}
+
+// Main enrollment system
+model Enrollment {
+  id           Int             @id @default(autoincrement())
+  studentProfileId Int
+  scheduleId   Int
+  status       EnrollmentStatus @default(PENDING)
+  priority     Int?            // For waitlist ordering
+  enrolledAt   DateTime        @default(now())
+  approvedAt   DateTime?
+  approvedById Int?
+  rejectedAt   DateTime?
+  rejectionReason String?
+  waitlistPosition Int?        // Position in waitlist
+  
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id])
+  schedule      Schedule       @relation(fields: [scheduleId], references: [id])
+  approvedBy    User?          @relation("ApprovedBy", fields: [approvedById], references: [id])
+  
+  // Prevent duplicate enrollments
+  @@unique([studentProfileId, scheduleId])
+  @@map("enrollments")
+}
+
+enum EnrollmentStatus {
+  PENDING      // Awaiting approval
+  APPROVED     // Approved and enrolled
+  REJECTED     // Application rejected
+  WAITLISTED   // On waiting list
+  WITHDRAWN    // Student withdrew
+  COMPLETED    // Course completed
+}
+
+// Academic periods
+model Semester {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique // "2025-1", "2025-2"
+  academicYear    Int
+  semesterNumber  Int      // 1, 2, 3 (for trimesters)
+  startDate       DateTime
+  endDate         DateTime
+  enrollmentStart DateTime // When enrollment opens
+  enrollmentEnd   DateTime // When enrollment closes
+  isActive        Boolean  @default(false)
+  isCurrent       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  
+  @@unique([academicYear, semesterNumber])
+  @@map("semesters")
+}
+
+// System settings and configurations
+model SystemSetting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+  description String?
+  
+  @@map("system_settings")
+}
+
+// Audit trail
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String   // "ENROLLMENT_CREATED", "ENROLLMENT_APPROVED", etc.
+  entityType String  // "Enrollment", "User", etc.
+  entityId  Int
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+  timestamp DateTime @default(now())
+  
+  user User? @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
+
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  userId    Int      
+  user      User     @relation(fields: [userId], references: [id])
+  otp       String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  
+  @@map("password_resets")
+}
