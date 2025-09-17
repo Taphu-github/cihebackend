@@ -1,23 +1,54 @@
-import jwt from "jsonwebtoken";
+import jwt from 'jsonwebtoken';
+import { PrismaClient } from '../generated/prisma/index.js';
+import { AppError } from '../utils/errors.js';
 
-export function authenticate(req, res, next) {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
 
+const prisma = new PrismaClient();
+
+const authMiddleware = async (req, res, next) => {
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload; // { id, role, email }
-    next();
-  } catch (err) {
-    res.status(403).json({ error: "Invalid token" });
-  }
-}
+    const token = req.header('Authorization')?.replace('Bearer ', '');
 
-export function authorize(roles = []) {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: "Forbidden" });
+    if (!token) {
+      throw new AppError('Access denied. No token provided.', 401);
     }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if user still exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      include: {
+        studentProfile: {
+          select: {
+            id: true,
+            studentId: true,
+            firstName: true,
+            lastName: true,
+            program: true,
+            yearLevel: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      throw new AppError('User not found.', 401);
+    }
+
+    if (!user.isActive) {
+      throw new AppError('Account is deactivated.', 401);
+    }
+
+    req.user = user;
     next();
-  };
-}
+  } catch (error) {
+    if (error instanceof AppError) {
+      next(error);
+    } else {
+      next(new AppError('Invalid token.', 401));
+    }
+  }
+};
+
+export { authMiddleware };

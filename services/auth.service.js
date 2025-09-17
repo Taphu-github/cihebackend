@@ -384,8 +384,8 @@ export class AuthService {
 
     // Send email
     const transporter = nodemailer.createTransport({//smtp.gmail.com facebookcustmersupprt00@gmail.com
-      host: "smtp.gmail.com",
-      port: 465,
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: process.env.SMTP_PORT || 465,
       secure: true,
       auth: {
         user: process.env.SMTP_USER,
@@ -394,7 +394,7 @@ export class AuthService {
     });
 
     await transporter.sendMail({
-      from: `"Enrollment System" <${process.env.SMTP_USER}>`,
+      from: `"Enrollment System" <${process.env.FROM_EMAIL}>`,
       to: user.email,
       subject: "Password Reset OTP",
       text: `Your OTP is ${otp}. It expires in 15 minutes.`,
